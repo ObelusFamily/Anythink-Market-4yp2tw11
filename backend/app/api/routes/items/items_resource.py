@@ -1,3 +1,13 @@
+import openai
+
+from os import environ as env
+
+from dotenv import load_dotenv
+load_dotenv()
+
+openai.api_key = env['OPENAI_API_KEY']
+
+
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Response
@@ -68,6 +78,18 @@ async def create_new_item(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=strings.ITEM_ALREADY_EXISTS,
         )
+
+    # Create image with OpenAI Dall-e if image not exists
+    image_url = item_create.image
+
+    if image_url == "":
+        response = openai.Image.create(
+            prompt=item_create.title,
+            n=1,
+            size="256x256"
+        )
+        image_url = response['data'][0]['url']
+    
     item = await items_repo.create_item(
         slug=slug,
         title=item_create.title,
@@ -75,8 +97,9 @@ async def create_new_item(
         body=item_create.body,
         seller=user,
         tags=item_create.tags,
-        image=item_create.image
+        image=image_url
     )
+
     send_event('item_created', {'item': item_create.title})
     return ItemInResponse(item=ItemForResponse.from_orm(item))
 
